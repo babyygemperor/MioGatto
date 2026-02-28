@@ -131,16 +131,32 @@ def calc_agreements(ref_mi_anno, target_mi_anno, ref_mcdict, mi_info, show_misma
 
 
 def sog_match(ref_mi_anno, target_mi_anno, word_list):
-    ref_sogs = [
-        ((word_list.index(sog[0]), word_list.index(sog[1])), anno['concept_id'])
-        for anno in ref_mi_anno.occr.values()
-        for sog in anno['sog']
-    ]
-    target_sogs = [
-        ((word_list.index(sog[0]), word_list.index(sog[1])), anno['concept_id'])
-        for anno in target_mi_anno.occr.values()
-        for sog in anno['sog']
-    ]
+    word2idx = {w: i for i, w in enumerate(word_list)}
+
+    def collect_sogs(mi_anno):
+        sogs = []
+        for anno in mi_anno.occr.values():
+            for sog in anno['sog']:
+                if isinstance(sog, dict):
+                    start_id = sog.get('start')
+                    stop_id = sog.get('stop')
+                elif isinstance(sog, (list, tuple)) and len(sog) >= 2:
+                    # compatibility for older sog format
+                    start_id = sog[0]
+                    stop_id = sog[1]
+                else:
+                    logger.debug('Skip malformed SoG entry: %s', sog)
+                    continue
+
+                if start_id not in word2idx or stop_id not in word2idx:
+                    logger.debug('Skip SoG span with unknown word ids: %s -> %s', start_id, stop_id)
+                    continue
+
+                sogs.append(((word2idx[start_id], word2idx[stop_id]), anno['concept_id']))
+        return sogs
+
+    ref_sogs = collect_sogs(ref_mi_anno)
+    target_sogs = collect_sogs(target_mi_anno)
 
     pos_sog_match = 0
     neg_sog_match = 0
